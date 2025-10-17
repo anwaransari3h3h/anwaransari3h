@@ -1,0 +1,290 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>McFun Challenge — Play While You Wait</title>
+  <style>
+    :root{--mcd-yellow:#FFCC00;--mcd-red:#DA291C;--bg:#fff;--muted:#666}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:linear-gradient(180deg,var(--mcd-yellow) 0%, #fff 60%);color:#111}
+    .wrap{max-width:520px;margin:12px auto;padding:12px}
+    .card{background:var(--bg);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.12);overflow:hidden}
+    header{display:flex;gap:12px;align-items:center;padding:14px}
+    .logo{width:56px;height:56px;border-radius:12px;background:var(--mcd-red);display:flex;align-items:center;justify-content:center;color:var(--mcd-yellow);font-weight:800;font-size:28px}
+    h1{margin:0;font-size:18px}
+    p.lead{margin:6px 0 0;color:var(--muted);font-size:14px}
+    main{padding:14px}
+    .question{margin:8px 0}
+    h3{font-size:16px;margin:0 0 8px}
+    .opts{display:flex;flex-wrap:wrap;gap:8px}
+    .opt{flex:1 1 48%;background:#f7f7f7;padding:10px;border-radius:10px;cursor:pointer;border:2px solid transparent;user-select:none;text-align:center}
+    .opt.selected{background:var(--mcd-yellow);border-color:var(--mcd-red);transform:translateY(-3px)}
+    .tiny{font-size:12px;color:var(--muted);margin-top:6px}
+    .btns{display:flex;gap:8px;margin-top:12px}
+    button{flex:1;background:var(--mcd-red);color:var(--mcd-yellow);border:none;padding:10px;border-radius:10px;font-weight:700;cursor:pointer}
+    button.secondary{background:transparent;border:2px solid var(--mcd-red);color:var(--mcd-red)}
+    .progress{margin-top:12px;height:8px;background:#eee;border-radius:999px;overflow:hidden}
+    .progbar{height:100%;width:0;background:linear-gradient(90deg,var(--mcd-red),#b50b0b)}
+    .resultView{display:none;padding:12px;text-align:center}
+    .coupon{display:inline-block;margin-top:8px;padding:8px 12px;border-radius:8px;background:#fff;color:var(--mcd-red);font-weight:800;font-size:18px;border:2px dashed var(--mcd-red)}
+    .confetti-canvas{position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:9999}
+    footer{padding:12px;text-align:center;font-size:13px;color:var(--muted)}
+    @media (max-width:420px){.opt{flex-basis:100%}}
+  </style>
+</head>
+<body>
+  <canvas id="confetti" class="confetti-canvas"></canvas>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <div class="logo">M</div>
+        <div>
+          <h1>McFun Challenge</h1>
+          <p class="lead">🌀 Scan to Play & Win a McSmile Reward 😃 — Quick 15-question game while you wait!</p>
+        </div>
+      </header>
+      <main id="main">
+        <div id="quizArea"></div>
+        <div class="progress" aria-hidden><div id="prog" class="progbar"></div></div>
+        <div class="btns" style="margin-top:12px">
+          <button id="prev" class="secondary">Previous</button>
+          <button id="next">Next</button>
+        </div>
+
+        <div id="result" class="resultView" aria-live="polite">
+          <h2>🎉 Thank you! You're awesome.</h2>
+          <p class="tiny">Show this screen to staff to claim your McSmile reward.</p>
+          <div class="coupon" id="coupon">MC-XXXXX</div>
+          <div style="margin-top:10px;display:flex;gap:8px;justify-content:center">
+            <button id="copy">Copy Code</button>
+            <button id="staffQR" class="secondary">Show QR for Staff</button>
+          </div>
+          <div style="margin-top:10px">
+            <button id="shareBtn">Share on Instagram</button>
+          </div>
+        </div>
+      </main>
+      <footer>Tag your moment: <strong>@McDonaldsIndia</strong> <small>#McFunChallenge</small></footer>
+    </div>
+  </div>
+
+<script>
+/* QUESTIONS */
+const QUESTIONS = [
+  {q:"What’s your all-time favorite McDonald’s item?", opts:["Fries","Burger","Cold Drink","McFlurry"]},
+  {q:"Which McDonald’s burger do you crave most?", opts:["McSpicy","Big Mac","Chicken Maharaja Mac","Veggie Burger"]},
+  {q:"What’s your go-to side dish?", opts:["Nuggets","Fries","Salad","Apple Pie"]},
+  {q:"Favorite McDonald’s drink?", opts:["Coke","Fanta","Milkshake","Water"]},
+  {q:"Which McDonald’s dessert is your favorite?", opts:["McFlurry","Sundae","Apple Pie","Soft Serve Cone"]},
+  {q:"How hungry are you right now?", opts:["Starving","Slightly Hungry","Just here for fun"]},
+  {q:"Who are you with today?", opts:["Friends","Family","Alone"]},
+  {q:"Pick your mood while waiting:", opts:["Excited","Chill","Hungry","Bored"]},
+  {q:"If you could eat only one McDonald’s item forever, what would it be?", opts:["Fries","Burger","Nuggets","McFlurry"]},
+  {q:"How often do you visit McDonald’s?", opts:["Daily","Weekly","Monthly","Rarely"]},
+  {q:"Which McDonald’s sauce can’t you live without?", opts:["Tomato Ketchup","Mustard","Sweet & Sour","Barbecue"]},
+  {q:"If McDonald’s made a super spicy burger, would you try it?", opts:["Yes, bring it on","Maybe, if not too hot","No way!"]},
+  {q:"Which McDonald’s mascot is your favorite?", opts:["Ronald McDonald","Hamburglar","Grimace","Birdie"]},
+  {q:"Pick your dream McDonald’s combo:", opts:["Burger + Fries + Coke","Nuggets + Fries + Milkshake","Veggie Burger + Salad + Water","McFlurry + Apple Pie + Coffee"]},
+  {q:"What would you like to see more at McDonald’s?", opts:["New burgers","More desserts","Fun games","Surprise gifts"]}
+];
+
+let idx = 0;
+const answers = new Array(QUESTIONS.length).fill(null);
+
+/* BUILD UI */
+const quizArea = document.getElementById('quizArea');
+function render(i){
+  quizArea.innerHTML = '';
+  const item = QUESTIONS[i];
+  const cont = document.createElement('div');
+  cont.className='question';
+  const h = document.createElement('h3'); h.textContent = `Q${i+1}. ${item.q}`; cont.appendChild(h);
+  const opts = document.createElement('div'); opts.className='opts';
+  item.opts.forEach(o=>{
+    const b = document.createElement('div'); b.className='opt'; b.textContent = o;
+    b.addEventListener('click', ()=>{
+      answers[i] = o;
+      Array.from(opts.children).forEach(ch=>ch.classList.remove('selected'));
+      b.classList.add('selected');
+      friendlyPopup(o);
+      saveProgress();
+      // auto next with short delay
+      setTimeout(()=>{ if(i < QUESTIONS.length-1){ idx++; render(idx);} else finish(); }, 650);
+    });
+    if(answers[i]===o) b.classList.add('selected');
+    opts.appendChild(b);
+  });
+  cont.appendChild(opts);
+  const helper = document.createElement('div'); helper.className='tiny'; helper.textContent = friendlyLine(); cont.appendChild(helper);
+  quizArea.appendChild(cont);
+  updateProgress();
+  updateButtons();
+}
+
+/* friendly messages that change */
+function friendlyLine(){
+  const texts = ["Nice choice!","Yum! Good taste.","Keep going — you're doing great.","Almost there!"];
+  return texts[Math.floor(Math.random()*texts.length)];
+}
+
+/* little popup / micro reaction */
+function friendlyPopup(text){
+  // small toast at bottom
+  const el = document.createElement('div');
+  el.style.position='fixed'; el.style.left='50%'; el.style.bottom='28px'; el.style.transform='translateX(-50%)';
+  el.style.background='rgba(0,0,0,0.8)'; el.style.color='#fff'; el.style.padding='8px 12px'; el.style.borderRadius='20px'; el.style.zIndex=9999;
+  el.style.fontSize='14px';
+  el.textContent = randomReaction(text);
+  document.body.appendChild(el);
+  setTimeout(()=>el.style.opacity='0',1200);
+  setTimeout(()=>el.remove(),1800);
+}
+
+/* micro reactions */
+function randomReaction(choice){
+  const reactions = [`Nice pick: ${choice} 🍟`, `Good taste! ${choice} 😊`, `Legendary choice: ${choice} 🤩`];
+  return reactions[Math.floor(Math.random()*reactions.length)];
+}
+
+/* progress & buttons */
+function updateProgress(){
+  const filled = answers.filter(a=>a!==null).length;
+  const pct = Math.round((filled/QUESTIONS.length)*100);
+  document.getElementById('prog').style.width = pct + '%';
+}
+function updateButtons(){
+  document.getElementById('prev').style.display = idx===0 ? 'none':'inline-block';
+  document.getElementById('next').textContent = idx===QUESTIONS.length-1 ? 'Finish':'Next';
+}
+
+/* nav buttons */
+document.getElementById('next').addEventListener('click', ()=>{ if(idx < QUESTIONS.length-1){ idx++; render(idx);} else finish(); });
+document.getElementById('prev').addEventListener('click', ()=>{ if(idx>0){ idx--; render(idx);} });
+
+/* save/load progress locally */
+function saveProgress(){ localStorage.setItem('mcfun_answers', JSON.stringify(answers)); }
+function loadProgress(){
+  const a = JSON.parse(localStorage.getItem('mcfun_answers')||'null');
+  if(a && Array.isArray(a) && a.length===QUESTIONS.length){
+    for(let i=0;i<a.length;i++) answers[i]=a[i];
+  }
+}
+loadProgress();
+render(idx);
+
+/* finish quiz */
+function finish(){
+  const missing = answers.findIndex(a=>a===null);
+  if(missing !== -1){ idx = missing; render(idx); friendlyPopup('Please answer all questions!'); return; }
+  // show result view
+  document.getElementById('result').style.display='block';
+  quizArea.style.display='none';
+  document.querySelector('.progress').style.display='none';
+  document.querySelector('.btns').style.display='none';
+  // coupon
+  const code = generateCode();
+  document.getElementById('coupon').textContent = code;
+  saveEntry(code);
+  playWinTone();
+  launchConfetti();
+}
+
+/* coupon + storage */
+function generateCode(){ return 'MC-' + Math.random().toString(36).substring(2,7).toUpperCase(); }
+function saveEntry(code){
+  try{
+    const data = JSON.parse(localStorage.getItem('mcfun_entries')||'[]');
+    data.push({time:new Date().toISOString(),code,answers});
+    localStorage.setItem('mcfun_entries', JSON.stringify(data));
+  }catch(e){}
+}
+
+/* copy & staff QR */
+document.getElementById('copy').addEventListener('click', ()=>{
+  const code = document.getElementById('coupon').textContent;
+  navigator.clipboard.writeText(code).then(()=>friendlyPopup('Coupon copied: '+code));
+});
+document.getElementById('staffQR').addEventListener('click', ()=>{
+  const code = document.getElementById('coupon').textContent;
+  const win = window.open('', '_blank');
+  win.document.write(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Show to staff</title><style>body{display:flex;align-items:center;justify-content:center;height:100%;margin:0;font-family:Arial} .box{padding:20px;border-radius:12px;text-align:center;border:6px dashed #DA291C} .code{font-size:40px;color:#DA291C;margin-top:8px}</style></head><body><div class="box"><div>Show this to staff</div><div class="code">${code}</div></div></body></html>`);
+});
+
+/* share button */
+document.getElementById('shareBtn').addEventListener('click', ()=>{
+  const code = document.getElementById('coupon').textContent;
+  const text = `I played the McFun Challenge! Show this code ${code} at McDonald's to get a McSmile reward. #McFunChallenge @McDonaldsIndia`;
+  if(navigator.share) navigator.share({text}).catch(()=>navigator.clipboard.writeText(text).then(()=>friendlyPopup('Share text copied!')));
+  else navigator.clipboard.writeText(text).then(()=>friendlyPopup('Share text copied!'));
+});
+
+/* sound: simple chime */
+function playWinTone(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0.12, ctx.currentTime+0.01);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime+0.25);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.75);
+    setTimeout(()=>{ o.stop(); ctx.close(); }, 900);
+  }catch(e){}
+}
+
+/* CONFETTI - small burst implementation */
+const confettiCanvas = document.getElementById('confetti');
+const confettiCtx = confettiCanvas.getContext('2d');
+let confettiParticles = [];
+function resizeCanvas(){ confettiCanvas.width = window.innerWidth; confettiCanvas.height = window.innerHeight; }
+window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+function launchConfetti(){
+  for(let i=0;i<120;i++){
+    confettiParticles.push({
+      x: Math.random()*confettiCanvas.width,
+      y: -10 - Math.random()*200,
+      vx: (Math.random()-0.5)*6,
+      vy: Math.random()*4 + 2,
+      size: Math.random()*6+4,
+      color: ['#DA291C','#FFCC00','#ffffff'][Math.floor(Math.random()*3)],
+      rot: Math.random()*360
+    });
+  }
+  if(!animRunning) animateConfetti();
+}
+let animRunning = false;
+function animateConfetti(){
+  animRunning = true;
+  const loop = ()=>{
+    confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+    for(let i=confettiParticles.length-1;i>=0;i--){
+      const p = confettiParticles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.08;
+      p.rot += p.vx;
+      confettiCtx.save();
+      confettiCtx.translate(p.x,p.y);
+      confettiCtx.rotate(p.rot*Math.PI/180);
+      confettiCtx.fillStyle = p.color;
+      confettiCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+      confettiCtx.restore();
+      if(p.y > confettiCanvas.height + 50) confettiParticles.splice(i,1);
+    }
+    if(confettiParticles.length>0) requestAnimationFrame(loop);
+    else animRunning = false;
+  };
+  requestAnimationFrame(loop);
+}
+
+/* small helper to reset if user wants to play again by reloading page */
+function resetAll(){ localStorage.removeItem('mcfun_answers'); location.reload(); }
+
+/* make inputs accessible: allow tapping 'Next' when option chosen */
+document.addEventListener('keydown', (e)=>{ if(e.key==='Enter') document.getElementById('next').click(); });
+
+</script>
+</body>
+</html>
